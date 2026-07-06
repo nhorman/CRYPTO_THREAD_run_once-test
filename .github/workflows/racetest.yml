@@ -16,8 +16,12 @@ permissions:
 
 jobs:
     check-crypto-thread-run-once:
-      runs-on: windows-11-arm
+      runs-on: windows-11-vs2026-arm
       steps:
+        - name: Setup MSVC
+          uses: ilammy/msvc-dev-cmd@v1
+          with:
+            arch: arm64
         - uses: actions/checkout@v6
           with:
             persist-credentials: false
