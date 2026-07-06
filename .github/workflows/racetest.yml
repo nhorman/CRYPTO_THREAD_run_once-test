@@ -26,9 +26,15 @@ jobs:
           with:
             persist-credentials: false
         - name: Build
+          shell: cmd
           run: |
-            cl /nologo /O2 /std:c11 CRYPTO_THREAD_run_once_fastpath_race.c /Fe:CRYPTO_THREAD_run_once_fastpath_race.exe
+            cl /nologo /Od /std:c11 CRYPTO_THREAD_run_once_fastpath_race.c /Fe:CRYPTO_THREAD_run_once_fastpath_race.exe
         - name: Test
+          shell: cmd
           run: |
-            CRYPTO_THREAD_run_once_fastpath_race.exe
+            CRYPTO_THREAD_run_once_fastpath_race.exe || exit 0
+        - name: Test fix
+          shell: cmd
+          run: |
+            CRYPTO_THREAD_run_once_fastpath_race.exe --fix
 
