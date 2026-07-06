@@ -25,5 +25,6 @@ jobs:
           run: |
             cl /nologo /O2 /std:c11 %* CRYPTO_THREAD_run_once_fastpath_race.c /Fe:CRYPTO_THREAD_run_once_fastpath_race.exe
         - name: Test
+          run: |
             CRYPTO_THREAD_run_once_fastpath_race.exe
 
