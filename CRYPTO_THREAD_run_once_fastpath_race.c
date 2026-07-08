@@ -105,13 +105,15 @@ int CRYPTO_THREAD_run_once(CRYPTO_ONCE *once, void (*init)(void))
 # define CACHELINE 128
 #endif
 
+#define ITERATIONS 50000000
+
 /* Backing storage (pre-allocated so we don't malloc per round in the test). */
 
 /* mirrors: static GLOBAL_TEVENT_REGISTER *glob_tevent_reg = NULL;  (NON-volatile) */
 __declspec(align(CACHELINE)) static GLOBAL_REGISTER *glob_register = NULL;
 
 /* mirrors: static CRYPTO_ONCE tevent_register_runonce = CRYPTO_ONCE_STATIC_INIT; */
-__declspec(align(CACHELINE)) static CRYPTO_ONCE register_once = CRYPTO_ONCE_STATIC_INIT;
+static CRYPTO_ONCE register_once[ITERATIONS] = { CRYPTO_ONCE_STATIC_INIT };
 
 /* mirrors DEFINE_RUN_ONCE_STATIC(create_global_tevent_register): fill then publish */
 static void create_global_register(void)
@@ -179,14 +181,13 @@ static DWORD WINAPI writer_thread(LPVOID p)
         sync_barrier(&local_sense);
 
         glob_register     = NULL;
-        register_once     = ONCE_UNINITED;
         MemoryBarrier();                  /* ensure reset visible */
 
         /* Wait for everyone to see the reset before racing. */
         sync_barrier(&local_sense);
 
         /* same call as readers */
-        (void)CRYPTO_THREAD_run_once(&register_once, create_global_register);
+        (void)CRYPTO_THREAD_run_once(&register_once[i], create_global_register);
     }
     return 0;
 }
@@ -198,19 +199,20 @@ static DWORD WINAPI writer_thread(LPVOID p)
 static DWORD WINAPI reader_thread(LPVOID p)
 {
     int local_sense = 0;
+
     for (LONG i = 0; i < ITERATIONS; i++) {
         sync_barrier(&local_sense);            /* wait: writer needs us done reading */
         sync_barrier(&local_sense);            /* wait: writer done resetting, race! */
-
         /* similar to get_global_tevent_register() in OpenSSL */
-        if (CRYPTO_THREAD_run_once(&register_once, create_global_register) != 1) {
+        if (CRYPTO_THREAD_run_once(&register_once[i], create_global_register) != 1) {
             printf("ERROR: The impossible happened: CRYPTO_THREAD_run_once failed\n");
             continue;
         }
 
-        GLOBAL_REGISTER *gtr = glob_register;
-        if (!gtr) {
+        if (!glob_register) {
             InterlockedIncrement(&g_violations);
+            if (i == 0)
+                printf("FIRST ITERATION VIOLATION\n");
         }
     }
     return 0;
@@ -221,13 +223,14 @@ int main(int argc, char **argv)
 {
     HANDLE hw;
     HANDLE *hr;
+    int i;
 
     for (int arg = 1; arg < argc; arg++) {
         if (strcmp(argv[arg], "--fix") == 0) {
             g_reader_acquire = 1;
         }
     }
-
+    
     SYSTEM_INFO si = {};
     GetSystemInfo(&si);
     DWORD ncpu = si.dwNumberOfProcessors;
